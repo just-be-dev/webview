@@ -1,4 +1,4 @@
-import { createWebView } from "../main.ts";
+import { createWebView } from "../main";
 
 using webview = await createWebView({
   title: "Simple",

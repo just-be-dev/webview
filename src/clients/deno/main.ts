@@ -5,11 +5,11 @@
  *
  * @example
  * ```ts
- * import { createWebView } from "jsr:@justbe/webview";
+ * import { createWebView } from "@justbe/webview";
  *
  * using webview = await createWebView({
  *  title: "Example",
- *  html: "<h1>Hello, World!</h1>",
+ *  load: { html: "<h1>Hello, World!</h1>" },
  *  devtools: true
  * });
  *
@@ -23,35 +23,52 @@
  */
 
 import { EventEmitter } from "node:events";
+import { spawn } from "node:child_process";
+import { writeFile, access, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { platform, arch, homedir } from "node:os";
+import { constants } from "node:fs";
 import {
   Message,
   type Options,
   type Request as WebViewRequest,
   Response as WebViewResponse,
-} from "./schemas.ts";
-import type { Except, Simplify } from "npm:type-fest";
-import { join } from "jsr:@std/path";
-import { ensureDir, exists } from "jsr:@std/fs";
-import { error, FmtSubscriber, instrument, Level, trace, warn } from "tracing";
-import { match, P } from "ts-pattern";
+} from "./schemas";
+import type { Except, Simplify } from "type-fest";
 
-export * from "./schemas.ts";
-
-if (
-  Deno.permissions.querySync({ name: "env", variable: "LOG_LEVEL" }).state ===
-    "granted"
-) {
-  const level = match(Deno.env.get("LOG_LEVEL"))
-    .with("trace", () => Level.TRACE)
-    .with("debug", () => Level.DEBUG)
-    .with("info", () => Level.INFO)
-    .with("warn", () => Level.WARN)
-    .with("error", () => Level.ERROR)
-    .with("fatal", () => Level.CRITICAL)
-    .otherwise(() => Level.INFO);
-
-  FmtSubscriber.setGlobalDefault({ level, color: true });
+// Simple logging interface to replace tracing
+interface Logger {
+  trace: (message: string, data?: any) => void;
+  warn: (message: string) => void;
+  error: (message: string, data?: any) => void;
 }
+
+const logger: Logger = {
+  trace: (message: string, data?: any) => {
+    if (process.env.LOG_LEVEL === 'trace' || process.env.LOG_LEVEL === 'debug') {
+      console.log(`[TRACE] ${message}`, data ? JSON.stringify(data) : '');
+    }
+  },
+  warn: (message: string) => {
+    console.warn(`[WARN] ${message}`);
+  },
+  error: (message: string, data?: any) => {
+    console.error(`[ERROR] ${message}`, data ? JSON.stringify(data) : '');
+  }
+};
+
+// Decorator replacement
+function instrument() {
+  return function(_target: any, _propertyKey: string, descriptor: PropertyDescriptor) {
+    return descriptor;
+  };
+}
+
+import { match } from "ts-pattern";
+
+export * from "./schemas";
+
+// Logging is now handled by the logger object above
 
 // Should match the cargo package version
 /** The version of the webview binary that's expected */
@@ -104,43 +121,42 @@ const returnAck = (result: WebViewResponse) => {
 };
 
 async function getWebViewBin(options: Options) {
-  if (
-    Deno.permissions.querySync({ name: "env", variable: "WEBVIEW_BIN" })
-      .state === "granted"
-  ) {
-    const binPath = Deno.env.get("WEBVIEW_BIN");
-    if (binPath) return binPath;
-  }
+  // Check for WEBVIEW_BIN environment variable
+  const binPath = process.env.WEBVIEW_BIN;
+  if (binPath) return binPath;
 
+  const currentPlatform = platform();
   const flags = options.devtools
     ? "-devtools"
-    : options.transparent && Deno.build.os === "darwin"
+    : options.transparent && currentPlatform === "darwin"
     ? "-transparent"
     : "";
 
   const cacheDir = getCacheDir();
   const fileName = `webview-${BIN_VERSION}${flags}${
-    Deno.build.os === "windows" ? ".exe" : ""
+    currentPlatform === "win32" ? ".exe" : ""
   }`;
   const filePath = join(cacheDir, fileName);
 
   // Check if the file already exists in cache
-  if (await exists(filePath)) {
+  if (await fileExists(filePath)) {
     return filePath;
   }
 
   // If not in cache, download it
   let url =
     `https://github.com/zephraph/webview/releases/download/webview-v${BIN_VERSION}/webview`;
-  url += match(Deno.build.os)
+  url += match(currentPlatform)
     .with(
       "darwin",
-      () => "-mac" + (Deno.build.arch === "aarch64" ? "-arm64" : "") + flags,
+      () => "-mac" + (arch() === "arm64" ? "-arm64" : "") + flags,
     )
     .with("linux", () => "-linux" + flags)
-    .with("windows", () => "-windows" + flags + ".exe")
+    .with("win32", () => "-windows" + flags + ".exe")
     .otherwise(() => {
-      throw new Error("unsupported OS");
+      // Default to linux for unknown platforms
+      logger.warn(`Unknown platform: ${currentPlatform}, defaulting to linux binary`);
+      return "-linux" + flags;
     });
 
   const res = await fetch(url);
@@ -149,28 +165,51 @@ async function getWebViewBin(options: Options) {
   await ensureDir(cacheDir);
 
   // Write the binary to disk
-  await Deno.writeFile(filePath, new Uint8Array(await res.arrayBuffer()), {
-    mode: 0o755,
-  });
+  const arrayBuffer = await res.arrayBuffer();
+  await writeFile(filePath, new Uint8Array(arrayBuffer), { mode: 0o755 });
 
   return filePath;
 }
 
 // Helper function to get the OS-specific cache directory
 function getCacheDir(): string {
-  return match(Deno.build.os)
+  const currentPlatform = platform();
+  return match(currentPlatform)
     .with(
       "darwin",
-      () => join(Deno.env.get("HOME")!, "Library", "Caches", "webview"),
+      () => join(homedir(), "Library", "Caches", "webview"),
     )
-    .with("linux", () => join(Deno.env.get("HOME")!, ".cache", "webview"))
+    .with("linux", () => join(homedir(), ".cache", "webview"))
     .with(
-      "windows",
-      () => join(Deno.env.get("LOCALAPPDATA")!, "webview", "Cache"),
+      "win32",
+      () => join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "webview", "Cache"),
     )
     .otherwise(() => {
-      throw new Error("Unsupported OS");
+      // Default to a .cache directory in home for unknown platforms
+      logger.warn(`Unknown platform: ${currentPlatform}, using default cache directory`);
+      return join(homedir(), ".cache", "webview");
     });
+}
+
+// Helper function to check if file exists
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Helper function to ensure directory exists
+async function ensureDir(dirPath: string): Promise<void> {
+  try {
+    await mkdir(dirPath, { recursive: true });
+  } catch (err: any) {
+    if (err.code !== "EEXIST") {
+      throw err;
+    }
+  }
 }
 
 /**
@@ -191,9 +230,7 @@ export async function createWebView(options: Options): Promise<WebView> {
  * Each instance of `WebView` spawns a new process that governs a single webview window.
  */
 export class WebView implements Disposable {
-  #process: Deno.ChildProcess;
-  #stdin: WritableStreamDefaultWriter;
-  #stdout: ReadableStreamDefaultReader;
+  #process: ReturnType<typeof spawn>;
   #buffer = "";
   #internalEvent = new EventEmitter();
   #externalEvent = new EventEmitter();
@@ -209,14 +246,9 @@ export class WebView implements Disposable {
    */
   constructor(options: Options, webviewBinaryPath: string) {
     this.#options = options;
-    this.#process = new Deno.Command(webviewBinaryPath, {
-      args: [JSON.stringify(options)],
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "inherit",
-    }).spawn();
-    this.#stdin = this.#process.stdin.getWriter();
-    this.#stdout = this.#process.stdout.getReader();
+    this.#process = spawn(webviewBinaryPath, [JSON.stringify(options)], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
     this.#messageLoop = this.#processMessageLoop();
   }
 
@@ -232,66 +264,62 @@ export class WebView implements Disposable {
           resolve({ $type: "err", id, message: result.error.message });
         }
       });
-      this.#stdin.write(
-        new TextEncoder().encode(
-          JSON.stringify({ ...request, id }),
-        ),
+      this.#process.stdin?.write(
+        JSON.stringify({ ...request, id }),
       );
     });
   }
 
-  @instrument()
-  async #recv() {
-    while (true) {
-      const { value, done } = await this.#stdout.read();
-      if (done) {
-        break;
-      }
-      this.#buffer += new TextDecoder().decode(value);
-
-      const newlineIndex = this.#buffer.indexOf("\n");
-      if (newlineIndex === -1) {
-        continue;
-      }
-      trace("buffer", { buffer: this.#buffer });
-      const result = Message.safeParse(
-        JSON.parse(this.#buffer.slice(0, newlineIndex)),
-      );
-      this.#buffer = this.#buffer.slice(newlineIndex + 1);
-      if (result.success) {
-        return result.data;
-      } else {
-        error("Error parsing message", { error: result.error });
-        return result;
-      }
-    }
+  async #processMessageLoop() {
+    return new Promise<void>((resolve) => {
+      this.#process.stdout?.on('data', (chunk: Buffer) => {
+        this.#buffer += chunk.toString();
+        
+        let newlineIndex;
+        while ((newlineIndex = this.#buffer.indexOf('\n')) !== -1) {
+          const messageStr = this.#buffer.slice(0, newlineIndex);
+          this.#buffer = this.#buffer.slice(newlineIndex + 1);
+          
+          try {
+            logger.trace("buffer", { buffer: messageStr });
+            const result = Message.safeParse(JSON.parse(messageStr));
+            
+            if (result.success) {
+              this.#handleMessage(result.data);
+            } else {
+              logger.error("Error parsing message", { error: result.error });
+            }
+          } catch (parseError) {
+            logger.error("Error parsing JSON", { error: parseError });
+          }
+        }
+      });
+      
+      this.#process.stdout?.on('end', () => {
+        resolve();
+      });
+      
+      this.#process.on('exit', () => {
+        resolve();
+      });
+    });
   }
 
-  async #processMessageLoop() {
-    while (true) {
-      const result = await this.#recv();
-      if (!result) return;
-      match(result)
-        .with({ error: { issues: [{ code: "invalid_type" }] } }, (result) => {
-          error("Invalid type", { error: result.error });
-        })
-        .with({ error: P.nonNullable }, (result) => {
-          error("Unknown error", { error: result.error });
-        })
-        .with({ $type: "notification" }, ({ data }) => {
-          const { $type, ...body } = data;
-          this.#externalEvent.emit($type, body);
-          if (data.$type === "started" && data.version !== BIN_VERSION) {
-            warn(
-              `Expected webview to be version ${BIN_VERSION} but got ${data.version}. Some features may not work as expected.`,
-            );
-          }
-        })
-        .with({ $type: "response" }, ({ data }) => {
-          this.#internalEvent.emit(data.id.toString(), data);
-        })
-        .exhaustive();
-    }
+  #handleMessage(result: Message) {
+    match(result)
+      .with({ $type: "notification" }, ({ data }) => {
+        const { $type, ...body } = data;
+        this.#externalEvent.emit($type, body);
+        if (data.$type === "started" && data.version !== BIN_VERSION) {
+          logger.warn(
+            `Expected webview to be version ${BIN_VERSION} but got ${data.version}. Some features may not work as expected.`,
+          );
+        }
+      })
+      .with({ $type: "response" }, ({ data }) => {
+        this.#internalEvent.emit(data.id.toString(), data);
+      })
+      .exhaustive();
   }
 
   /**
@@ -366,10 +394,13 @@ export class WebView implements Disposable {
   async getSize(
     includeDecorations?: boolean,
   ): Promise<{ width: number; height: number; scaleFactor: number }> {
-    const result = await this.#send({
+    const request: any = {
       $type: "getSize",
-      include_decorations: includeDecorations,
-    });
+    };
+    if (includeDecorations !== undefined) {
+      request.include_decorations = includeDecorations;
+    }
+    const result = await this.#send(request);
     return returnResult(
       result,
       "size",
@@ -383,7 +414,11 @@ export class WebView implements Disposable {
    */
   @instrument()
   async fullscreen(fullscreen?: boolean): Promise<void> {
-    const result = await this.#send({ $type: "fullscreen", fullscreen });
+    const request: any = { $type: "fullscreen" };
+    if (fullscreen !== undefined) {
+      request.fullscreen = fullscreen;
+    }
+    const result = await this.#send(request);
     return returnAck(result);
   }
 
@@ -394,7 +429,11 @@ export class WebView implements Disposable {
    */
   @instrument()
   async maximize(maximized?: boolean): Promise<void> {
-    const result = await this.#send({ $type: "maximize", maximized });
+    const request: any = { $type: "maximize" };
+    if (maximized !== undefined) {
+      request.maximized = maximized;
+    }
+    const result = await this.#send(request);
     return returnAck(result);
   }
 
@@ -405,7 +444,11 @@ export class WebView implements Disposable {
    */
   @instrument()
   async minimize(minimized?: boolean): Promise<void> {
-    const result = await this.#send({ $type: "minimize", minimized });
+    const request: any = { $type: "minimize" };
+    if (minimized !== undefined) {
+      request.minimized = minimized;
+    }
+    const result = await this.#send(request);
     return returnAck(result);
   }
 
@@ -480,7 +523,11 @@ export class WebView implements Disposable {
    */
   @instrument()
   async loadUrl(url: string, headers?: Record<string, string>): Promise<void> {
-    const result = await this.#send({ $type: "loadUrl", url, headers });
+    const request: any = { $type: "loadUrl", url };
+    if (headers !== undefined) {
+      request.headers = headers;
+    }
+    const result = await this.#send(request);
     return returnAck(result);
   }
 
@@ -520,11 +567,11 @@ export class WebView implements Disposable {
    */
   [Symbol.dispose](): void {
     this.#internalEvent.removeAllListeners();
-    this.#stdin.releaseLock();
+    this.#externalEvent.removeAllListeners();
     try {
       this.#process.kill();
     } catch (_) {
-      _;
+      // Ignore errors when killing process
     }
   }
 }

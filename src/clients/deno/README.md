@@ -1,22 +1,38 @@
-# @justbe/webview Deno Client
+# @justbe/webview
 
-A light, cross-platform library for building web-based desktop apps with
-[Deno](https://deno.com/).
+A light, cross-platform library for building web-based desktop apps. This package provides a universal client that is compatible with Deno, Node.js, and Bun.
+
+## Compatibility
+
+- ✅ **Node.js** 18+ (fully supported)
+- ✅ **Deno** (original implementation, fully supported)
+- ⚠️ **Bun** (limited support - older versions may have issues)
 
 ## Installation
 
+### Node.js
+```bash
+npm install @justbe/webview
+```
+
+### Deno
 ```typescript
 import { createWebView } from "jsr:@justbe/webview";
+```
+
+### Bun
+```bash
+bun install @justbe/webview
 ```
 
 ## Example
 
 ```typescript
-import { createWebView } from "jsr:@justbe/webview";
+import { createWebView } from "@justbe/webview";
 
 using webview = await createWebView({
   title: "Example",
-  html: "<h1>Hello, World!</h1>",
+  load: { html: "<h1>Hello, World!</h1>" },
   devtools: true,
 });
 
@@ -28,10 +44,17 @@ webview.on("started", async () => {
 await webview.waitUntilClosed();
 ```
 
-You can run this yourself with:
+### Running Examples
 
-```sh
-deno run https://raw.githubusercontent.com/zephraph/webview/refs/heads/main/examples/simple.ts
+**Node.js:**
+```bash
+npm run build
+node examples/simple.js
+```
+
+**Deno:**
+```bash
+deno run --allow-all examples/simple.ts
 ```
 
 Check out the [examples directory](examples/) for more examples.

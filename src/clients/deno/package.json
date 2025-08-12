@@ -1,0 +1,46 @@
+{
+  "name": "@justbe/webview",
+  "version": "1.0.1-rc.2",
+  "license": "MIT",
+  "type": "module",
+  "main": "./main.js",
+  "types": "./main.d.ts",
+  "exports": {
+    ".": {
+      "import": "./main.js",
+      "types": "./main.d.ts"
+    }
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "*.js",
+    "*.d.ts",
+    "schemas/*.js",
+    "schemas/*.d.ts"
+  ],
+  "scripts": {
+    "build:tsc": "tsc --outDir . --declaration",
+    "build:fix": "node fix-imports.js",
+    "build": "npm run build:tsc && npm run build:fix",
+    "clean": "find . -name '*.js' -not -name 'fix-imports.js' -delete && find . -name '*.d.ts' -delete && find . -name '*.js.map' -delete",
+    "prepare": "npm run build",
+    "test": "node --test examples/*.js"
+  },
+  "dependencies": {
+    "ts-pattern": "^5.8.0",
+    "zod": "^3.23.8",
+    "type-fest": "^4.26.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "glob": "^11.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
