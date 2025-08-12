@@ -1,0 +1,11 @@
+# Build artifacts
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+
+# Keep specific files
+!fix-imports.js
+
+# Dependencies
+node_modules/
