@@ -2,7 +2,7 @@ import asyncio
 import os
 import platform
 import subprocess
-from typing import Any, Callable, Literal, Union, cast, TypeVar
+from typing import Any, Callable, Literal, cast, TypeVar
 from pathlib import Path
 import aiofiles
 import httpx
@@ -54,7 +54,7 @@ T = TypeVar("T", bound=WebViewNotification)
 
 
 def return_result(
-    result: Union[AckResponse, ResultResponse, ErrResponse],
+    result: AckResponse | ResultResponse | ErrResponse,
     expected_type: type[ResultType],
 ) -> Any:
     print(f"Return result: {result}")
@@ -63,7 +63,7 @@ def return_result(
     raise ValueError(f"Expected {expected_type.__name__} result got: {result}")
 
 
-def return_ack(result: Union[AckResponse, ResultResponse, ErrResponse]) -> None:
+def return_ack(result: AckResponse | ResultResponse | ErrResponse) -> None:
     print(f"Return ack: {result}")
     if isinstance(result, AckResponse):
         return
@@ -212,11 +212,11 @@ class WebView:
     async def send(self, request: WebViewRequest) -> WebViewResponse:
         if self.process is None:
             raise RuntimeError("Webview process not started")
-        future: asyncio.Future[Union[AckResponse, ResultResponse, ErrResponse]] = (
+        future: asyncio.Future[AckResponse | ResultResponse | ErrResponse] = (
             asyncio.Future()
         )
 
-        def set_result(event: Union[AckResponse, ResultResponse, ErrResponse]) -> None:
+        def set_result(event: AckResponse | ResultResponse | ErrResponse) -> None:
             future.set_result(event)
 
         self.internal_event.once(str(request.id), set_result)  # type: ignore
@@ -229,7 +229,7 @@ class WebView:
         result = await future
         return result
 
-    async def recv(self) -> Union[WebViewNotification, None]:
+    async def recv(self) -> WebViewNotification | None:
         if self.process is None:
             raise RuntimeError("Webview process not started")
 
@@ -319,7 +319,7 @@ class WebView:
 
     async def get_size(
         self, include_decorations: bool = False
-    ) -> dict[Literal["width", "height", "scaleFactor"], Union[int, float]]:
+    ) -> dict[Literal["width", "height", "scaleFactor"], int | float]:
         result = await self.send(
             GetSizeRequest(id=self.message_id, include_decorations=include_decorations)
         )
