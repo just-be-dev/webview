@@ -9,6 +9,9 @@ uv = "0.9.2"
 experimental = true
 pin = true
 
+[hooks]
+postinstall = "mise run ci:install-deps"
+
 [tasks."ci:install-deps"]
 hide = true
 description = "Install CI dependencies (only runs on CI)"
@@ -30,7 +33,6 @@ description = "Generate JSON schemas from the rust code"
 run = "cargo run --bin generate_schemas"
 sources = ["src/**/*.rs", "Cargo.toml", "Cargo.lock"]
 outputs = ["schemas/*.json"]
-depends = ["ci:install-deps"]
 
 [tasks."gen:deno"]
 description = "Generate the deno client"
