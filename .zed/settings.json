@@ -12,6 +12,16 @@
           "enablePaths": ["src/clients/deno"]
         }
       }
+    },
+    "basedpyright": {
+      "settings": {
+        "python.pythonPath": "src/clients/python/.venv/bin/python",
+        "python.venvPath": "src/clients/python",
+        "python.analysis": {
+          "venvPath": "src/clients/python",
+          "venv": ".venv"
+        }
+      }
     }
   }
 }
