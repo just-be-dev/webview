@@ -17,7 +17,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "lint"
+          shared-key: mise-{{hashFiles('mise.toml')}}
 
       - name: Lint
         run: mise lint
@@ -48,7 +48,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "codegen"
+          shared-key: "mise-{{hashFiles('mise.toml')}}"
 
       - name: Run codegen
         run: mise run gen
