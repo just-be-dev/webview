@@ -1,0 +1,17 @@
+{
+  "languages": {
+    "TypeScript": {
+      "language_servers": ["deno", "!typescript-language-server", "!vtsls"]
+    }
+  },
+  "lsp": {
+    "deno": {
+      "settings": {
+        "deno": {
+          "enable": true,
+          "enablePaths": ["src/clients/deno"]
+        }
+      }
+    }
+  }
+}
