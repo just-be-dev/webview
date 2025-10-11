@@ -97,12 +97,31 @@ depends = ["gen:python", "build:rust"]
 description = "Build all targets"
 depends = ["build:*"]
 
+## Format
+
+[tasks."format:rust"]
+description = "Format rust code"
+run = ["rustfmt src/**/*.rs"]
+
+[tasks."format:deno"]
+description = "Format deno code"
+run = ["deno fmt src/clients/deno"]
+
+[tasks."format:python"]
+description = "Format python code"
+run = ["ruff format src/clients/python"]
+
+[tasks.format]
+alias = "fmt"
+description = "Format all code"
+depends = ["format:*"]
+
 ## Lint
 
 [tasks."lint:rust"]
 description = "Run clippy against rust code"
 depends = ["ci:install-deps"]
-run = ["cargo fmt --check", "cargo clippy"]
+run = ["rustfmt --check src/**/*.rs", "cargo clippy"]
 
 [tasks."lint:deno"]
 description = "Run deno lint"
