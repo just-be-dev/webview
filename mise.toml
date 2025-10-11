@@ -31,6 +31,7 @@ run = "deno run -A scripts/sync-versions.ts"
 [tasks."gen:rust"]
 description = "Generate JSON schemas from the rust code"
 run = "cargo run --bin generate_schemas"
+depends_post = ["format:rust"]
 sources = ["src/**/*.rs", "Cargo.toml", "Cargo.lock"]
 outputs = ["schemas/*.json"]
 
@@ -38,6 +39,7 @@ outputs = ["schemas/*.json"]
 description = "Generate the deno client"
 run = "deno run -A scripts/generate-schema/index.ts --language typescript"
 depends = ["gen:rust"]
+depends_post = ["format:deno"]
 sources = ["schemas/*", "scripts/generate-schema.ts"]
 outputs = ["src/clients/deno/schemas/*.ts"]
 
@@ -45,6 +47,7 @@ outputs = ["src/clients/deno/schemas/*.ts"]
 description = "Generate the python client"
 run = "deno run -A scripts/generate-schema/index.ts --language python"
 depends = ["gen:rust"]
+depends_post = ["format:python"]
 sources = ["schemas/*", "scripts/generate-schema.ts"]
 outputs = ["src/clients/python/src/justbe_webview/schemas/*.py"]
 
