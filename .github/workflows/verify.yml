@@ -13,12 +13,6 @@ jobs:
           cache_key_prefix: mise-{{hashFiles('mise.toml')}}
           experimental: true
 
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: mise-{{hashFiles('mise.toml')}}
-
       - name: Lint
         run: mise lint
 
