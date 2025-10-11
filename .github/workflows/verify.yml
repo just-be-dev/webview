@@ -13,6 +13,8 @@ jobs:
           cache_key_prefix: mise-{{hashFiles('mise.toml')}}
           experimental: true
 
+      - run: mise trust
+
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: rustfmt
@@ -41,6 +43,8 @@ jobs:
         with:
           cache_key_prefix: mise-{{hashFiles('mise.toml')}}
           experimental: true
+
+      - run: mise trust
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
