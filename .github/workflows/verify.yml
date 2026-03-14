@@ -13,11 +13,11 @@ jobs:
           cache_key_prefix: mise-{{hashFiles('mise.toml')}}
           experimental: true
 
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      - run: mise trust
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          cache-on-failure: true
-          shared-key: mise-{{hashFiles('mise.toml')}}
+          components: rustfmt
 
       - name: Lint
         run: mise lint
@@ -44,11 +44,11 @@ jobs:
           cache_key_prefix: mise-{{hashFiles('mise.toml')}}
           experimental: true
 
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      - run: mise trust
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          cache-on-failure: true
-          shared-key: "mise-{{hashFiles('mise.toml')}}"
+          components: rustfmt
 
       - name: Run codegen
         run: mise run gen
