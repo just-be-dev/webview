@@ -24,10 +24,10 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install mise
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
 
       - name: Install tools
         run: mise install
@@ -61,7 +61,7 @@ jobs:
 
       - name: Publish to PyPI
         if: ${{ steps.current_version.outputs.version != steps.published_version.outputs.version && github.event_name == 'workflow_run' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           packages-dir: src/clients/python/dist/
           verbose: true

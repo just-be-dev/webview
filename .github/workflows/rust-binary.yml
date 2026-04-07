@@ -32,9 +32,9 @@ jobs:
             binary_name: webview-mac-arm64
             platform: macos
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
         env:
           RUSTUP_TARGET: ${{ matrix.target }}
           MISE_ENV: ${{ matrix.platform }}
@@ -44,7 +44,7 @@ jobs:
           experimental: true
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           cache-on-failure: true
           shared-key: "binary-${{ matrix.target }}"
@@ -114,7 +114,7 @@ jobs:
           mv target/${{ matrix.target }}/${{ steps.build_flags.outputs.build_type }}/webview.exe ${{ matrix.binary_name }}-devtools.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.build_flags.outputs.build_type }}-binary-${{ matrix.target }}
           path: ${{ matrix.binary_name }}*
