@@ -1,0 +1,19 @@
+mise.toml
+  s_bf2f7159b0316c::t_71315f6ed8de86 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "b5f7e4dc2439febe314fb99def70fea0db79a306",
+  "prompts": {},
+  "sessions": {
+    "s_bf2f7159b0316c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e856f15e-4cd7-45a8-8155-fd77f1542570",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Justin Bennett <git@just-be.dev>"
+    }
+  }
+}
