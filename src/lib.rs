@@ -355,18 +355,16 @@ fn process_input<R: Read + std::marker::Send + 'static>(
                     json_string.push(']');
                 }
                 JsonEvent::FieldName => {
-                    if json_string.ends_with('{') {
-                        json_string.push('"');
-                    } else {
-                        json_string.push_str(",\"");
+                    if !json_string.ends_with('{') {
+                        json_string.push(',');
                     }
-                    json_string.push_str(parser.current_str().unwrap());
-                    json_string.push_str("\":");
+                    json_string
+                        .push_str(&serde_json::to_string(parser.current_str().unwrap()).unwrap());
+                    json_string.push(':');
                 }
                 JsonEvent::ValueString => {
-                    json_string.push('"');
-                    json_string.push_str(parser.current_str().unwrap());
-                    json_string.push('"');
+                    json_string
+                        .push_str(&serde_json::to_string(parser.current_str().unwrap()).unwrap());
                 }
                 JsonEvent::ValueInt => {
                     json_string.push_str(&parser.current_int::<i64>().unwrap().to_string());
@@ -893,6 +891,134 @@ mod tests {
             receiver.try_recv().is_err(),
             "Should not have any more messages"
         );
+    }
+
+    /// Round-trips a `LoadHtml` payload through `process_input` and asserts
+    /// the received `html` matches the original byte-for-byte.
+    fn assert_load_html_roundtrip(html: &str) {
+        let request = Request::LoadHtml {
+            id: 42,
+            html: html.to_string(),
+            origin: Some("example.com".to_string()),
+        };
+
+        let json = serde_json::to_vec(&request).unwrap();
+        let cursor = Cursor::new(json);
+        let reader = BufReader::new(cursor);
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Ok(Request::LoadHtml {
+                id,
+                html: received_html,
+                origin,
+            }) => {
+                assert_eq!(id, 42);
+                assert_eq!(received_html, html);
+                assert_eq!(origin.as_deref(), Some("example.com"));
+            }
+            Ok(other) => panic!("Unexpected request variant: {:?}", other),
+            Err(e) => panic!("Failed to receive message: {:?}", e),
+        }
+    }
+
+    /// Reproduces https://github.com/just-be-dev/webview/issues/203
+    ///
+    /// `loadHtml` fails when the HTML contains characters that require JSON
+    /// escaping (e.g. `"` in attribute values, newlines). The streaming JSON
+    /// reconstruction in `process_input` re-emits string values raw, producing
+    /// invalid JSON that `serde_json::from_str` then rejects.
+    #[test]
+    fn test_process_input_load_html_with_quotes_and_newlines() {
+        assert_load_html_roundtrip(
+            "<html>\n  <body>\n    <a href=\"https://example.com\" class=\"link\">click</a>\n  </body>\n</html>",
+        );
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_backslashes() {
+        // Inline JS with a regex literal — backslashes must survive a round-trip.
+        assert_load_html_roundtrip(
+            r#"<script>const re = /\d+\.\d+/; const path = "C:\\Users\\foo";</script>"#,
+        );
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_control_chars() {
+        // Tabs, carriage returns, and form-feed all require JSON escaping.
+        assert_load_html_roundtrip("<pre>\tcol1\tcol2\r\nrow1\tval\x0c</pre>");
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_unicode() {
+        // Multi-byte UTF-8, emoji (surrogate pair when JSON-escaped), and a
+        // raw U+007F DEL control character.
+        assert_load_html_roundtrip("<p>héllo 世界 🌍 \u{007f}</p>");
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_braces_in_string() {
+        // Curly braces inside string content must not confuse the depth tracker.
+        assert_load_html_roundtrip(
+            r#"<style>.x { color: "red"; } [data-x] { y: 1; }</style><script>const o = {"a": [1,2]};</script>"#,
+        );
+    }
+
+    #[test]
+    fn test_process_input_load_html_long() {
+        // The original report mentions "long" HTML. Build a ~64 KB payload
+        // sprinkled with characters that must be JSON-escaped.
+        let chunk = r#"<div class="row" data-x="a\b"> "hi" </div>"# .to_string() + "\n";
+        let mut html = String::with_capacity(64 * 1024);
+        while html.len() < 64 * 1024 {
+            html.push_str(&chunk);
+        }
+        assert_load_html_roundtrip(&html);
+    }
+
+    #[test]
+    fn test_process_input_load_url_headers_with_special_chars() {
+        // Exercises the FieldName path (header map keys) and string values
+        // that contain JSON-escape-required characters.
+        let headers = HashMap::from([
+            (
+                "X-Quoted".to_string(),
+                r#"value with "quotes" and \backslash"#.to_string(),
+            ),
+            ("X-Newline".to_string(), "line1\nline2".to_string()),
+        ]);
+        let request = Request::LoadUrl {
+            id: 7,
+            url: "https://example.com/path?q=\"x\"".to_string(),
+            headers: Some(headers.clone()),
+        };
+
+        let json = serde_json::to_vec(&request).unwrap();
+        let cursor = Cursor::new(json);
+        let reader = BufReader::new(cursor);
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Ok(Request::LoadUrl {
+                id,
+                url,
+                headers: received,
+            }) => {
+                assert_eq!(id, 7);
+                assert_eq!(url, "https://example.com/path?q=\"x\"");
+                assert_eq!(received, Some(headers));
+            }
+            Ok(other) => panic!("Unexpected request variant: {:?}", other),
+            Err(e) => panic!("Failed to receive message: {:?}", e),
+        }
     }
 
     #[test]
