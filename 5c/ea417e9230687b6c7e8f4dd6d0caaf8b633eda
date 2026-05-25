@@ -1,0 +1,23 @@
+Cargo.lock
+  ai_agent 2233
+Cargo.toml
+  s_bf45ca5e15ad33::t_cb09848ee03550 3
+CHANGELOG.md
+  s_bf45ca5e15ad33::t_3e34d23a02898c 3-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "5cea417e9230687b6c7e8f4dd6d0caaf8b633eda",
+  "prompts": {},
+  "sessions": {
+    "s_bf45ca5e15ad33": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "09473e00-4c65-488d-b099-3e46d72b7cb0",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Justin Bennett <git@just-be.dev>"
+    }
+  }
+}
