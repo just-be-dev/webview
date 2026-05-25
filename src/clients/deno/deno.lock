@@ -1,44 +1,35 @@
 {
-  "version": "4",
+  "version": "5",
   "specifiers": {
-    "jsr:@bcheidemann/parse-params@0.5": "0.5.0",
-    "jsr:@bcheidemann/tracing@~0.6.3": "0.6.3",
+    "jsr:@bcheidemann/parse-params@~0.5.1": "0.5.1",
+    "jsr:@bcheidemann/tracing@0.9": "0.9.3",
     "jsr:@gabriel/ts-pattern@^5.6.2": "5.6.2",
-    "jsr:@std/assert@0.226": "0.226.0",
-    "jsr:@std/assert@0.226.0": "0.226.0",
     "jsr:@std/fmt@~0.225.4": "0.225.6",
     "jsr:@std/fs@^1.0.3": "1.0.6",
-    "jsr:@std/internal@1": "1.0.5",
     "jsr:@std/path@^1.0.6": "1.0.8",
     "jsr:@std/path@^1.0.8": "1.0.8",
+    "npm:@opentelemetry/api@^1.9.0": "1.9.1",
     "npm:acorn@8.12.0": "8.12.0",
     "npm:type-fest@^4.26.1": "4.30.2",
     "npm:zod@^3.23.8": "3.23.8"
   },
   "jsr": {
-    "@bcheidemann/parse-params@0.5.0": {
-      "integrity": "a13a95163fad0cbd34890cb5d43df3466cc96e97e76674052592a90bbf56bbab",
+    "@bcheidemann/parse-params@0.5.1": {
+      "integrity": "ef073425ed65508439ae10063fed07162601a997427dc340340fb8703606b574",
       "dependencies": [
-        "jsr:@std/assert@0.226.0",
         "npm:acorn"
       ]
     },
-    "@bcheidemann/tracing@0.6.3": {
-      "integrity": "d6f38e77ef142a88b9eaeff3a2df54a8a24b2226fff747119ddc40726a05abeb",
+    "@bcheidemann/tracing@0.9.3": {
+      "integrity": "7d424d5ee04df04710a4c2257cc9fa59e4aa36ac231778428470a3e088909d6f",
       "dependencies": [
         "jsr:@bcheidemann/parse-params",
-        "jsr:@std/assert@0.226",
-        "jsr:@std/fmt"
+        "jsr:@std/fmt",
+        "npm:@opentelemetry/api"
       ]
     },
     "@gabriel/ts-pattern@5.6.2": {
       "integrity": "49a1069523e2ba53d024d6b17a30029f8ffc80b24fec86d724d986a9774a7197"
-    },
-    "@std/assert@0.226.0": {
-      "integrity": "0dfb5f7c7723c18cec118e080fec76ce15b4c31154b15ad2bd74822603ef75b3",
-      "dependencies": [
-        "jsr:@std/internal"
-      ]
     },
     "@std/fmt@0.225.6": {
       "integrity": "aba6aea27f66813cecfd9484e074a9e9845782ab0685c030e453a8a70b37afc8"
@@ -49,16 +40,17 @@
         "jsr:@std/path@^1.0.8"
       ]
     },
-    "@std/internal@1.0.5": {
-      "integrity": "54a546004f769c1ac9e025abd15a76b6671ddc9687e2313b67376125650dc7ba"
-    },
     "@std/path@1.0.8": {
       "integrity": "548fa456bb6a04d3c1a1e7477986b6cffbce95102d0bb447c67c4ee70e0364be"
     }
   },
   "npm": {
+    "@opentelemetry/api@1.9.1": {
+      "integrity": "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="
+    },
     "acorn@8.12.0": {
-      "integrity": "sha512-RTvkC4w+KNXrM39/lWCUaG0IbRkWdCv7W/IOW9oU6SawyxulvkQy5HQPVTKxEjczcUvapcrw3cFx/60VN/NRNw=="
+      "integrity": "sha512-RTvkC4w+KNXrM39/lWCUaG0IbRkWdCv7W/IOW9oU6SawyxulvkQy5HQPVTKxEjczcUvapcrw3cFx/60VN/NRNw==",
+      "bin": true
     },
     "type-fest@4.30.2": {
       "integrity": "sha512-UJShLPYi1aWqCdq9HycOL/gwsuqda1OISdBO3t8RlXQC4QvtuIz4b5FCfe2dQIWEpmlRExKmcTBfP1r9bhY7ig=="
@@ -72,7 +64,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@bcheidemann/tracing@~0.6.3",
+      "jsr:@bcheidemann/tracing@0.9",
       "jsr:@gabriel/ts-pattern@^5.6.2",
       "jsr:@std/fs@^1.0.3",
       "jsr:@std/path@^1.0.6",
