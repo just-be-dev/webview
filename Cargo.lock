@@ -2230,7 +2230,7 @@ dependencies = [
 
 [[package]]
 name = "webview"
-version = "0.3.0"
+version = "0.3.2"
 dependencies = [
  "parking_lot",
  "schemars",
