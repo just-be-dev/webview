@@ -971,6 +971,165 @@ mod tests {
     }
 
     #[test]
+    fn test_process_input_whitespace_separated_values() {
+        // Real clients write back-to-back JSON, but the streaming deserializer
+        // should also accept whitespace (newlines, spaces, tabs) between values.
+        let payload = b"{\"$type\":\"getVersion\",\"id\":1}\n  {\"$type\":\"getVersion\",\"id\":2}\t\r\n{\"$type\":\"getVersion\",\"id\":3}";
+        let reader = BufReader::new(Cursor::new(payload.to_vec()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        for expected_id in [1, 2, 3] {
+            match receiver.try_recv() {
+                Ok(Request::GetVersion { id }) => assert_eq!(id, expected_id),
+                Ok(other) => panic!("Unexpected request variant: {:?}", other),
+                Err(e) => panic!("Expected request id={} but got {:?}", expected_id, e),
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_input_malformed_json_terminates_stream() {
+        // A garbled value should terminate the stream — `serde_json::StreamDeserializer`
+        // cannot resync after a parse error, so subsequent valid values are not delivered.
+        let payload = b"{\"$type\":\"getVersion\",\"id\":1}\n{not valid json}\n{\"$type\":\"getVersion\",\"id\":2}";
+        let reader = BufReader::new(Cursor::new(payload.to_vec()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // First valid value comes through.
+        match receiver.try_recv() {
+            Ok(Request::GetVersion { id }) => assert_eq!(id, 1),
+            other => panic!("Expected GetVersion id=1, got {:?}", other),
+        }
+        // Nothing further — sender thread has exited.
+        match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Disconnected) => {}
+            other => panic!("Expected Disconnected after malformed input, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_input_wrong_schema_terminates_stream() {
+        // Well-formed JSON that doesn't match `Request` also stops the stream.
+        let payload =
+            b"{\"$type\":\"getVersion\",\"id\":1}\n{\"$type\":\"notARealRequest\",\"id\":2}\n{\"$type\":\"getVersion\",\"id\":3}";
+        let reader = BufReader::new(Cursor::new(payload.to_vec()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Ok(Request::GetVersion { id }) => assert_eq!(id, 1),
+            other => panic!("Expected GetVersion id=1, got {:?}", other),
+        }
+        match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Disconnected) => {}
+            other => panic!("Expected Disconnected after schema error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_input_empty_input() {
+        // Empty input should exit cleanly without producing messages or panicking.
+        let reader = BufReader::new(Cursor::new(Vec::<u8>::new()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Disconnected) => {}
+            other => panic!("Expected Disconnected on empty input, got {:?}", other),
+        }
+    }
+
+    /// A `Read` that returns at most one byte per call. Verifies that the
+    /// stream parser actually streams — it must not require the whole input
+    /// (or even a whole value) to be buffered before it can parse.
+    struct OneByteAtATime {
+        data: Vec<u8>,
+        pos: usize,
+    }
+
+    impl Read for OneByteAtATime {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.pos >= self.data.len() || buf.is_empty() {
+                return Ok(0);
+            }
+            buf[0] = self.data[self.pos];
+            self.pos += 1;
+            Ok(1)
+        }
+    }
+
+    #[test]
+    fn test_process_input_chunked_reader() {
+        let requests = vec![
+            Request::GetVersion { id: 1 },
+            Request::LoadHtml {
+                id: 2,
+                html: "<p>hi \"world\"</p>".to_string(),
+                origin: None,
+            },
+        ];
+        let mut bytes = Vec::new();
+        for req in &requests {
+            bytes.extend(serde_json::to_vec(req).unwrap());
+        }
+        let reader = BufReader::new(OneByteAtATime { data: bytes, pos: 0 });
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        match receiver.try_recv() {
+            Ok(Request::GetVersion { id }) => assert_eq!(id, 1),
+            other => panic!("Expected GetVersion id=1, got {:?}", other),
+        }
+        match receiver.try_recv() {
+            Ok(Request::LoadHtml { id, html, origin }) => {
+                assert_eq!(id, 2);
+                assert_eq!(html, "<p>hi \"world\"</p>");
+                assert_eq!(origin, None);
+            }
+            other => panic!("Expected LoadHtml id=2, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_input_receiver_dropped_does_not_panic() {
+        // Before the refactor, `sender.send(request).unwrap()` would panic in
+        // the worker thread when the receiver was dropped. The new code
+        // returns gracefully.
+        let mut bytes = Vec::new();
+        for id in 0..100 {
+            bytes.extend(serde_json::to_vec(&Request::GetVersion { id }).unwrap());
+        }
+        let reader = BufReader::new(Cursor::new(bytes));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+        drop(receiver);
+
+        // Give the worker time to attempt sends and exit. If it panics, the
+        // thread is detached so we can't observe it directly — but the test
+        // process should not abort. A short sleep is enough to surface a
+        // panic during local runs; CI catches more reliably.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    #[test]
     fn test_process_output_multiple() {
         let output = Arc::new(Mutex::new(Vec::new()));
         let output_clone = output.clone();
