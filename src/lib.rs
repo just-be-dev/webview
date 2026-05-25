@@ -1,4 +1,3 @@
-use actson::options::JsonParserOptionsBuilder;
 use parking_lot::Mutex;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -22,9 +21,6 @@ use tao::{
 use wry::http::header::{HeaderName, HeaderValue};
 use wry::http::Response as HttpResponse;
 use wry::WebViewBuilder;
-
-use actson::feeder::BufReaderJsonFeeder;
-use actson::{JsonEvent, JsonParser};
 
 /// The version of the webview binary.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -303,78 +299,31 @@ impl From<bool> for ResultType {
     }
 }
 
-/// Incrementally parses JSON input from a reader and sends the parsed requests to a sender.
+/// Streams JSON requests from the reader and forwards them to the sender.
 ///
-/// This is used in the main program to read JSON input from stdin and send it to the webview
-/// event loop.
+/// Used by the main program to read JSON requests from stdin. Each request
+/// must be a complete top-level JSON object; values may be concatenated or
+/// separated by whitespace. On a parse error the stream is abandoned —
+/// serde_json's `StreamDeserializer` cannot recover from a malformed value.
 fn process_input<R: Read + std::marker::Send + 'static>(
     reader: BufReader<R>,
     sender: Sender<Request>,
 ) {
     std::thread::spawn(move || {
-        let feeder = BufReaderJsonFeeder::new(reader);
-        let mut parser = JsonParser::new_with_options(
-            feeder,
-            JsonParserOptionsBuilder::default()
-                .with_streaming(true)
-                .build(),
-        );
-
-        let mut json_string = String::new();
-        let mut depth = 0;
-
-        while let Some(event) = parser.next_event().unwrap() {
-            match event {
-                JsonEvent::NeedMoreInput => parser.feeder.fill_buf().unwrap(),
-                JsonEvent::StartObject => {
-                    depth += 1;
-                    json_string.push('{');
-                }
-                JsonEvent::EndObject => {
-                    depth -= 1;
-                    json_string.push('}');
-
-                    // If we're back at depth 0, we have a complete JSON object
-                    if depth == 0 {
-                        match serde_json::from_str::<Request>(&json_string) {
-                            Ok(request) => {
-                                debug!(request = ?request, "Received request from client");
-                                sender.send(request).unwrap()
-                            }
-                            Err(e) => error!("Failed to deserialize request: {:?}", e),
-                        }
-                        json_string.clear();
+        let stream = serde_json::Deserializer::from_reader(reader).into_iter::<Request>();
+        for result in stream {
+            match result {
+                Ok(request) => {
+                    debug!(request = ?request, "Received request from client");
+                    if sender.send(request).is_err() {
+                        return;
                     }
                 }
-                JsonEvent::StartArray => {
-                    depth += 1;
-                    json_string.push('[');
+                Err(e) if e.is_eof() => return,
+                Err(e) => {
+                    error!("Failed to deserialize request: {:?}", e);
+                    return;
                 }
-                JsonEvent::EndArray => {
-                    depth -= 1;
-                    json_string.push(']');
-                }
-                JsonEvent::FieldName => {
-                    if !json_string.ends_with('{') {
-                        json_string.push(',');
-                    }
-                    json_string
-                        .push_str(&serde_json::to_string(parser.current_str().unwrap()).unwrap());
-                    json_string.push(':');
-                }
-                JsonEvent::ValueString => {
-                    json_string
-                        .push_str(&serde_json::to_string(parser.current_str().unwrap()).unwrap());
-                }
-                JsonEvent::ValueInt => {
-                    json_string.push_str(&parser.current_int::<i64>().unwrap().to_string());
-                }
-                JsonEvent::ValueFloat => {
-                    json_string.push_str(&parser.current_float().unwrap().to_string());
-                }
-                JsonEvent::ValueTrue => json_string.push_str("true"),
-                JsonEvent::ValueFalse => json_string.push_str("false"),
-                JsonEvent::ValueNull => json_string.push_str("null"),
             }
         }
     });
