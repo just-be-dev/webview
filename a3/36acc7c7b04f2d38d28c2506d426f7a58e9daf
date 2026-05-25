@@ -1,0 +1,19 @@
+src/lib.rs
+  s_bf45ca5e15ad33::t_370ad9eb482427 302,304-307,313-319,322-325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "a336acc7c7b04f2d38d28c2506d426f7a58e9daf",
+  "prompts": {},
+  "sessions": {
+    "s_bf45ca5e15ad33": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "09473e00-4c65-488d-b099-3e46d72b7cb0",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Justin Bennett <git@just-be.dev>"
+    }
+  }
+}
