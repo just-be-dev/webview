@@ -1,0 +1,27 @@
+src/clients/python/pyproject.toml
+  s_bf45ca5e15ad33::t_ae2fa44b00f22d 7
+CHANGELOG.md
+  s_bf45ca5e15ad33::t_f916287437154c 3-5,10-16
+src/clients/python/src/justbe_webview/__init__.py
+  s_bf45ca5e15ad33::t_3da77efa36d68f 51
+src/clients/deno/main.ts
+  s_bf45ca5e15ad33::t_46b6e8e0e7a83b 58
+src/clients/deno/deno.json
+  s_bf45ca5e15ad33::t_0f02ed0dd636be 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.1",
+  "base_commit_sha": "6bd1f30a5a68d34ade28ee38b6b487ec0a69af5d",
+  "prompts": {},
+  "sessions": {
+    "s_bf45ca5e15ad33": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "09473e00-4c65-488d-b099-3e46d72b7cb0",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Justin Bennett <git@just-be.dev>"
+    }
+  }
+}
