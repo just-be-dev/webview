@@ -1,6 +1,6 @@
 [package]
 name = "webview"
-version = "0.3.0"
+version = "0.3.2"
 edition = "2021"
 
 [profile.release]
@@ -16,7 +16,6 @@ tao = "0.33.0"
 wry = "0.51.0"
 schemars = "0.8.21"
 parking_lot = "0.12"
-actson = "2.0.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

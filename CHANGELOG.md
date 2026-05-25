@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.5 Python Client; 1.0.1-rc.3 Deno Client; 0.3.2 binary -- 2026-05-25
+
+Binary
+
+- Fixed `loadHtml` failing when the HTML payload contained characters requiring JSON escaping such as `"`, `\`, newlines, or control characters (#203)
+- Refactored stdin JSON parsing to use `serde_json`'s streaming `Deserializer` directly; removes the `actson` dependency
+
+Python Client
+
+- Updated webview binary to 0.3.2
+
+Deno Client
+
+- Updated webview binary to 0.3.2
+
 ## 0.0.4 Python Client; 1.0.1-rc.2 Deno Client; 0.3.1 binary -- 2025-03-05
 
 - Fixed a bug that caused webview to fail to open on linux

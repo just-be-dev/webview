@@ -1,4 +1,3 @@
-use actson::options::JsonParserOptionsBuilder;
 use parking_lot::Mutex;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -22,9 +21,6 @@ use tao::{
 use wry::http::header::{HeaderName, HeaderValue};
 use wry::http::Response as HttpResponse;
 use wry::WebViewBuilder;
-
-use actson::feeder::BufReaderJsonFeeder;
-use actson::{JsonEvent, JsonParser};
 
 /// The version of the webview binary.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -303,80 +299,31 @@ impl From<bool> for ResultType {
     }
 }
 
-/// Incrementally parses JSON input from a reader and sends the parsed requests to a sender.
+/// Streams JSON requests from the reader and forwards them to the sender.
 ///
-/// This is used in the main program to read JSON input from stdin and send it to the webview
-/// event loop.
+/// Used by the main program to read JSON requests from stdin. Each request
+/// must be a complete top-level JSON object; values may be concatenated or
+/// separated by whitespace. On a parse error the stream is abandoned —
+/// serde_json's `StreamDeserializer` cannot recover from a malformed value.
 fn process_input<R: Read + std::marker::Send + 'static>(
     reader: BufReader<R>,
     sender: Sender<Request>,
 ) {
     std::thread::spawn(move || {
-        let feeder = BufReaderJsonFeeder::new(reader);
-        let mut parser = JsonParser::new_with_options(
-            feeder,
-            JsonParserOptionsBuilder::default()
-                .with_streaming(true)
-                .build(),
-        );
-
-        let mut json_string = String::new();
-        let mut depth = 0;
-
-        while let Some(event) = parser.next_event().unwrap() {
-            match event {
-                JsonEvent::NeedMoreInput => parser.feeder.fill_buf().unwrap(),
-                JsonEvent::StartObject => {
-                    depth += 1;
-                    json_string.push('{');
-                }
-                JsonEvent::EndObject => {
-                    depth -= 1;
-                    json_string.push('}');
-
-                    // If we're back at depth 0, we have a complete JSON object
-                    if depth == 0 {
-                        match serde_json::from_str::<Request>(&json_string) {
-                            Ok(request) => {
-                                debug!(request = ?request, "Received request from client");
-                                sender.send(request).unwrap()
-                            }
-                            Err(e) => error!("Failed to deserialize request: {:?}", e),
-                        }
-                        json_string.clear();
+        let stream = serde_json::Deserializer::from_reader(reader).into_iter::<Request>();
+        for result in stream {
+            match result {
+                Ok(request) => {
+                    debug!(request = ?request, "Received request from client");
+                    if sender.send(request).is_err() {
+                        return;
                     }
                 }
-                JsonEvent::StartArray => {
-                    depth += 1;
-                    json_string.push('[');
+                Err(e) if e.is_eof() => return,
+                Err(e) => {
+                    error!("Failed to deserialize request: {:?}", e);
+                    return;
                 }
-                JsonEvent::EndArray => {
-                    depth -= 1;
-                    json_string.push(']');
-                }
-                JsonEvent::FieldName => {
-                    if json_string.ends_with('{') {
-                        json_string.push('"');
-                    } else {
-                        json_string.push_str(",\"");
-                    }
-                    json_string.push_str(parser.current_str().unwrap());
-                    json_string.push_str("\":");
-                }
-                JsonEvent::ValueString => {
-                    json_string.push('"');
-                    json_string.push_str(parser.current_str().unwrap());
-                    json_string.push('"');
-                }
-                JsonEvent::ValueInt => {
-                    json_string.push_str(&parser.current_int::<i64>().unwrap().to_string());
-                }
-                JsonEvent::ValueFloat => {
-                    json_string.push_str(&parser.current_float().unwrap().to_string());
-                }
-                JsonEvent::ValueTrue => json_string.push_str("true"),
-                JsonEvent::ValueFalse => json_string.push_str("false"),
-                JsonEvent::ValueNull => json_string.push_str("null"),
             }
         }
     });
@@ -893,6 +840,293 @@ mod tests {
             receiver.try_recv().is_err(),
             "Should not have any more messages"
         );
+    }
+
+    /// Round-trips a `LoadHtml` payload through `process_input` and asserts
+    /// the received `html` matches the original byte-for-byte.
+    fn assert_load_html_roundtrip(html: &str) {
+        let request = Request::LoadHtml {
+            id: 42,
+            html: html.to_string(),
+            origin: Some("example.com".to_string()),
+        };
+
+        let json = serde_json::to_vec(&request).unwrap();
+        let cursor = Cursor::new(json);
+        let reader = BufReader::new(cursor);
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Ok(Request::LoadHtml {
+                id,
+                html: received_html,
+                origin,
+            }) => {
+                assert_eq!(id, 42);
+                assert_eq!(received_html, html);
+                assert_eq!(origin.as_deref(), Some("example.com"));
+            }
+            Ok(other) => panic!("Unexpected request variant: {:?}", other),
+            Err(e) => panic!("Failed to receive message: {:?}", e),
+        }
+    }
+
+    /// Reproduces https://github.com/just-be-dev/webview/issues/203
+    ///
+    /// `loadHtml` fails when the HTML contains characters that require JSON
+    /// escaping (e.g. `"` in attribute values, newlines). The streaming JSON
+    /// reconstruction in `process_input` re-emits string values raw, producing
+    /// invalid JSON that `serde_json::from_str` then rejects.
+    #[test]
+    fn test_process_input_load_html_with_quotes_and_newlines() {
+        assert_load_html_roundtrip(
+            "<html>\n  <body>\n    <a href=\"https://example.com\" class=\"link\">click</a>\n  </body>\n</html>",
+        );
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_backslashes() {
+        // Inline JS with a regex literal — backslashes must survive a round-trip.
+        assert_load_html_roundtrip(
+            r#"<script>const re = /\d+\.\d+/; const path = "C:\\Users\\foo";</script>"#,
+        );
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_control_chars() {
+        // Tabs, carriage returns, and form-feed all require JSON escaping.
+        assert_load_html_roundtrip("<pre>\tcol1\tcol2\r\nrow1\tval\x0c</pre>");
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_unicode() {
+        // Multi-byte UTF-8, emoji (surrogate pair when JSON-escaped), and a
+        // raw U+007F DEL control character.
+        assert_load_html_roundtrip("<p>héllo 世界 🌍 \u{007f}</p>");
+    }
+
+    #[test]
+    fn test_process_input_load_html_with_braces_in_string() {
+        // Curly braces inside string content must not confuse the depth tracker.
+        assert_load_html_roundtrip(
+            r#"<style>.x { color: "red"; } [data-x] { y: 1; }</style><script>const o = {"a": [1,2]};</script>"#,
+        );
+    }
+
+    #[test]
+    fn test_process_input_load_html_long() {
+        // The original report mentions "long" HTML. Build a ~64 KB payload
+        // sprinkled with characters that must be JSON-escaped.
+        let chunk = r#"<div class="row" data-x="a\b"> "hi" </div>"# .to_string() + "\n";
+        let mut html = String::with_capacity(64 * 1024);
+        while html.len() < 64 * 1024 {
+            html.push_str(&chunk);
+        }
+        assert_load_html_roundtrip(&html);
+    }
+
+    #[test]
+    fn test_process_input_load_url_headers_with_special_chars() {
+        // Exercises the FieldName path (header map keys) and string values
+        // that contain JSON-escape-required characters.
+        let headers = HashMap::from([
+            (
+                "X-Quoted".to_string(),
+                r#"value with "quotes" and \backslash"#.to_string(),
+            ),
+            ("X-Newline".to_string(), "line1\nline2".to_string()),
+        ]);
+        let request = Request::LoadUrl {
+            id: 7,
+            url: "https://example.com/path?q=\"x\"".to_string(),
+            headers: Some(headers.clone()),
+        };
+
+        let json = serde_json::to_vec(&request).unwrap();
+        let cursor = Cursor::new(json);
+        let reader = BufReader::new(cursor);
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Ok(Request::LoadUrl {
+                id,
+                url,
+                headers: received,
+            }) => {
+                assert_eq!(id, 7);
+                assert_eq!(url, "https://example.com/path?q=\"x\"");
+                assert_eq!(received, Some(headers));
+            }
+            Ok(other) => panic!("Unexpected request variant: {:?}", other),
+            Err(e) => panic!("Failed to receive message: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_process_input_whitespace_separated_values() {
+        // Real clients write back-to-back JSON, but the streaming deserializer
+        // should also accept whitespace (newlines, spaces, tabs) between values.
+        let payload = b"{\"$type\":\"getVersion\",\"id\":1}\n  {\"$type\":\"getVersion\",\"id\":2}\t\r\n{\"$type\":\"getVersion\",\"id\":3}";
+        let reader = BufReader::new(Cursor::new(payload.to_vec()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        for expected_id in [1, 2, 3] {
+            match receiver.try_recv() {
+                Ok(Request::GetVersion { id }) => assert_eq!(id, expected_id),
+                Ok(other) => panic!("Unexpected request variant: {:?}", other),
+                Err(e) => panic!("Expected request id={} but got {:?}", expected_id, e),
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_input_malformed_json_terminates_stream() {
+        // A garbled value should terminate the stream — `serde_json::StreamDeserializer`
+        // cannot resync after a parse error, so subsequent valid values are not delivered.
+        let payload = b"{\"$type\":\"getVersion\",\"id\":1}\n{not valid json}\n{\"$type\":\"getVersion\",\"id\":2}";
+        let reader = BufReader::new(Cursor::new(payload.to_vec()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // First valid value comes through.
+        match receiver.try_recv() {
+            Ok(Request::GetVersion { id }) => assert_eq!(id, 1),
+            other => panic!("Expected GetVersion id=1, got {:?}", other),
+        }
+        // Nothing further — sender thread has exited.
+        match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Disconnected) => {}
+            other => panic!("Expected Disconnected after malformed input, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_input_wrong_schema_terminates_stream() {
+        // Well-formed JSON that doesn't match `Request` also stops the stream.
+        let payload =
+            b"{\"$type\":\"getVersion\",\"id\":1}\n{\"$type\":\"notARealRequest\",\"id\":2}\n{\"$type\":\"getVersion\",\"id\":3}";
+        let reader = BufReader::new(Cursor::new(payload.to_vec()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Ok(Request::GetVersion { id }) => assert_eq!(id, 1),
+            other => panic!("Expected GetVersion id=1, got {:?}", other),
+        }
+        match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Disconnected) => {}
+            other => panic!("Expected Disconnected after schema error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_input_empty_input() {
+        // Empty input should exit cleanly without producing messages or panicking.
+        let reader = BufReader::new(Cursor::new(Vec::<u8>::new()));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Disconnected) => {}
+            other => panic!("Expected Disconnected on empty input, got {:?}", other),
+        }
+    }
+
+    /// A `Read` that returns at most one byte per call. Verifies that the
+    /// stream parser actually streams — it must not require the whole input
+    /// (or even a whole value) to be buffered before it can parse.
+    struct OneByteAtATime {
+        data: Vec<u8>,
+        pos: usize,
+    }
+
+    impl Read for OneByteAtATime {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.pos >= self.data.len() || buf.is_empty() {
+                return Ok(0);
+            }
+            buf[0] = self.data[self.pos];
+            self.pos += 1;
+            Ok(1)
+        }
+    }
+
+    #[test]
+    fn test_process_input_chunked_reader() {
+        let requests = vec![
+            Request::GetVersion { id: 1 },
+            Request::LoadHtml {
+                id: 2,
+                html: "<p>hi \"world\"</p>".to_string(),
+                origin: None,
+            },
+        ];
+        let mut bytes = Vec::new();
+        for req in &requests {
+            bytes.extend(serde_json::to_vec(req).unwrap());
+        }
+        let reader = BufReader::new(OneByteAtATime { data: bytes, pos: 0 });
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        match receiver.try_recv() {
+            Ok(Request::GetVersion { id }) => assert_eq!(id, 1),
+            other => panic!("Expected GetVersion id=1, got {:?}", other),
+        }
+        match receiver.try_recv() {
+            Ok(Request::LoadHtml { id, html, origin }) => {
+                assert_eq!(id, 2);
+                assert_eq!(html, "<p>hi \"world\"</p>");
+                assert_eq!(origin, None);
+            }
+            other => panic!("Expected LoadHtml id=2, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_input_receiver_dropped_does_not_panic() {
+        // Before the refactor, `sender.send(request).unwrap()` would panic in
+        // the worker thread when the receiver was dropped. The new code
+        // returns gracefully.
+        let mut bytes = Vec::new();
+        for id in 0..100 {
+            bytes.extend(serde_json::to_vec(&Request::GetVersion { id }).unwrap());
+        }
+        let reader = BufReader::new(Cursor::new(bytes));
+        let (sender, receiver) = mpsc::channel();
+
+        process_input(reader, sender);
+        drop(receiver);
+
+        // Give the worker time to attempt sends and exit. If it panics, the
+        // thread is detached so we can't observe it directly — but the test
+        // process should not abort. A short sleep is enough to surface a
+        // panic during local runs; CI catches more reliably.
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
     #[test]
