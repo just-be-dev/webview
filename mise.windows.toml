@@ -1,2 +1,2 @@
 [tools]
-"cargo:cargo-xwin" = "0.18.3"
+"cargo:cargo-xwin" = "0.22.0"
