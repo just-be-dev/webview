@@ -12,6 +12,6 @@
     "jsr:@std/fs": "jsr:@std/fs@^1.0.3",
     "jsr:@std/path": "jsr:@std/path@^1.0.6",
     "npm:zod": "npm:zod@^3.23.8",
-    "npm:type-fest": "npm:type-fest@^4.26.1"
+    "npm:type-fest": "npm:type-fest@^5.0.0"
   }
 }
