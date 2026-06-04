@@ -1,7 +1,7 @@
 [tools]
 deno = "2.4.2"
 node = "24"
-bun = "1"
+bun = "latest"
 ast-grep = "0.43.0"
 rust = { version = "1.90.0", components="rustfmt,clippy,rust-analyzer" }
 ruff = "0.15.14"
