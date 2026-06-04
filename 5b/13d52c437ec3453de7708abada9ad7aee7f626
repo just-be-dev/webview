@@ -1,0 +1,23 @@
+src/clients/typescript/deno.json
+  s_b1e9e963cbc690::t_cfb4e89645823d 5
+src/clients/typescript/package.json
+  s_b1e9e963cbc690::t_04a88fe0f6062b 3
+src/clients/typescript/package-lock.json
+  ai_agent 3,9,1181,1236,1485
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5b13d52c437ec3453de7708abada9ad7aee7f626",
+  "prompts": {},
+  "sessions": {
+    "s_b1e9e963cbc690": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1e8320d-062c-4523-8856-803a797f56d8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Justin Bennett <git@just-be.dev>"
+    }
+  }
+}
