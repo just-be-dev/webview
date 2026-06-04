@@ -60,7 +60,7 @@ description = "Prints a simplified version of the schema"
 usage = '''
 arg "[schema]" help="The schema to print; prints all if not provided"
 '''
-run = "deno run -A scripts/generate-schema/debug.ts {{arg(name=\"schema\")}}"
+run = "deno run -A scripts/generate-schema/debug.ts $usage_schema"
 
 ## Publishing
 
@@ -154,12 +154,18 @@ depends = ["lint:*"]
 description = "Run a python example"
 depends = ["build:python"]
 dir = "src/clients/python"
-run = "uv run -n examples/{{arg(name=\"example\")}}.py"
+usage = '''
+arg "<example>" help="The example to run"
+'''
+run = "uv run -n examples/$usage_example.py"
 env = { LOG_LEVEL = "debug", WEBVIEW_BIN = "../../../target/debug/webview" }
 
 [tasks."example:deno"]
 description = "Run a deno example"
 depends = ["build:deno"]
 env = { LOG_LEVEL = "debug", WEBVIEW_BIN = "../../../target/debug/webview" }
-run = "deno run -E -R -N --allow-run examples/{{arg(name=\"example\")}}.ts"
+usage = '''
+arg "<example>" help="The example to run"
+'''
+run = "deno run -E -R -N --allow-run examples/$usage_example.ts"
 dir = "src/clients/deno"
