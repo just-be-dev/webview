@@ -1,11 +1,13 @@
 /**
  * A library for creating and interacting with native webview windows.
  *
+ * Works on Node (>= 20.9), Deno, and Bun.
+ *
  * @module
  *
  * @example
  * ```ts
- * import { createWebView } from "jsr:@justbe/webview";
+ * import { createWebView } from "@justbe/webview";
  *
  * using webview = await createWebView({
  *  title: "Example",
@@ -22,36 +24,25 @@
  * ```
  */
 
+import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { Readable, Writable } from "node:stream";
 import {
   Message,
   type Options,
   type Request as WebViewRequest,
   Response as WebViewResponse,
 } from "./schemas.ts";
-import type { Except, Simplify } from "npm:type-fest";
-import { join } from "jsr:@std/path";
-import { ensureDir, exists } from "jsr:@std/fs";
-import { error, FmtSubscriber, instrument, Level, trace, warn } from "tracing";
+import type { Except, Simplify } from "type-fest";
+import { error, setLogLevel, trace, warn } from "./logger.ts";
+import { getEnv, platformArch, platformOs } from "./runtime.ts";
 import { match, P } from "ts-pattern";
 
 export * from "./schemas.ts";
 
-if (
-  Deno.permissions.querySync({ name: "env", variable: "LOG_LEVEL" }).state ===
-    "granted"
-) {
-  const level = match(Deno.env.get("LOG_LEVEL"))
-    .with("trace", () => Level.TRACE)
-    .with("debug", () => Level.DEBUG)
-    .with("info", () => Level.INFO)
-    .with("warn", () => Level.WARN)
-    .with("error", () => Level.ERROR)
-    .with("fatal", () => Level.CRITICAL)
-    .otherwise(() => Level.INFO);
-
-  FmtSubscriber.setGlobalDefault({ level, color: true });
-}
+setLogLevel(getEnv("LOG_LEVEL"));
 
 // Should match the cargo package version
 /** The version of the webview binary that's expected */
@@ -103,24 +94,28 @@ const returnAck = (result: WebViewResponse) => {
     });
 };
 
-async function getWebViewBin(options: Options) {
-  if (
-    Deno.permissions.querySync({ name: "env", variable: "WEBVIEW_BIN" })
-      .state === "granted"
-  ) {
-    const binPath = Deno.env.get("WEBVIEW_BIN");
-    if (binPath) return binPath;
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
+}
+
+async function getWebViewBin(options: Options) {
+  const envBinPath = getEnv("WEBVIEW_BIN");
+  if (envBinPath) return envBinPath;
 
   const flags = options.devtools
     ? "-devtools"
-    : options.transparent && Deno.build.os === "darwin"
+    : options.transparent && platformOs() === "darwin"
     ? "-transparent"
     : "";
 
   const cacheDir = getCacheDir();
   const fileName = `webview-${BIN_VERSION}${flags}${
-    Deno.build.os === "windows" ? ".exe" : ""
+    platformOs() === "windows" ? ".exe" : ""
   }`;
   const filePath = join(cacheDir, fileName);
 
@@ -132,10 +127,10 @@ async function getWebViewBin(options: Options) {
   // If not in cache, download it
   let url =
     `https://github.com/zephraph/webview/releases/download/webview-v${BIN_VERSION}/webview`;
-  url += match(Deno.build.os)
+  url += match(platformOs())
     .with(
       "darwin",
-      () => "-mac" + (Deno.build.arch === "aarch64" ? "-arm64" : "") + flags,
+      () => "-mac" + (platformArch() === "aarch64" ? "-arm64" : "") + flags,
     )
     .with("linux", () => "-linux" + flags)
     .with("windows", () => "-windows" + flags + ".exe")
@@ -146,10 +141,10 @@ async function getWebViewBin(options: Options) {
   const res = await fetch(url);
 
   // Ensure the cache directory exists
-  await ensureDir(cacheDir);
+  await mkdir(cacheDir, { recursive: true });
 
   // Write the binary to disk
-  await Deno.writeFile(filePath, new Uint8Array(await res.arrayBuffer()), {
+  await writeFile(filePath, new Uint8Array(await res.arrayBuffer()), {
     mode: 0o755,
   });
 
@@ -158,15 +153,15 @@ async function getWebViewBin(options: Options) {
 
 // Helper function to get the OS-specific cache directory
 function getCacheDir(): string {
-  return match(Deno.build.os)
+  return match(platformOs())
     .with(
       "darwin",
-      () => join(Deno.env.get("HOME")!, "Library", "Caches", "webview"),
+      () => join(getEnv("HOME")!, "Library", "Caches", "webview"),
     )
-    .with("linux", () => join(Deno.env.get("HOME")!, ".cache", "webview"))
+    .with("linux", () => join(getEnv("HOME")!, ".cache", "webview"))
     .with(
       "windows",
-      () => join(Deno.env.get("LOCALAPPDATA")!, "webview", "Cache"),
+      () => join(getEnv("LOCALAPPDATA")!, "webview", "Cache"),
     )
     .otherwise(() => {
       throw new Error("Unsupported OS");
@@ -191,9 +186,11 @@ export async function createWebView(options: Options): Promise<WebView> {
  * Each instance of `WebView` spawns a new process that governs a single webview window.
  */
 export class WebView implements Disposable {
-  #process: Deno.ChildProcess;
-  #stdin: WritableStreamDefaultWriter;
-  #stdout: ReadableStreamDefaultReader;
+  #process: ChildProcess;
+  #stdin: Writable;
+  #stdout: Readable;
+  #stdoutIter: AsyncIterator<Uint8Array>;
+  #decoder = new TextDecoder();
   #buffer = "";
   #internalEvent = new EventEmitter();
   #externalEvent = new EventEmitter();
@@ -209,14 +206,12 @@ export class WebView implements Disposable {
    */
   constructor(options: Options, webviewBinaryPath: string) {
     this.#options = options;
-    this.#process = new Deno.Command(webviewBinaryPath, {
-      args: [JSON.stringify(options)],
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "inherit",
-    }).spawn();
-    this.#stdin = this.#process.stdin.getWriter();
-    this.#stdout = this.#process.stdout.getReader();
+    this.#process = spawn(webviewBinaryPath, [JSON.stringify(options)], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    this.#stdin = this.#process.stdin!;
+    this.#stdout = this.#process.stdout!;
+    this.#stdoutIter = this.#stdout[Symbol.asyncIterator]();
     this.#messageLoop = this.#processMessageLoop();
   }
 
@@ -232,26 +227,23 @@ export class WebView implements Disposable {
           resolve({ $type: "err", id, message: result.error.message });
         }
       });
-      this.#stdin.write(
-        new TextEncoder().encode(
-          JSON.stringify({ ...request, id }),
-        ),
-      );
+      this.#stdin.write(JSON.stringify({ ...request, id }));
     });
   }
 
-  @instrument()
   async #recv() {
     while (true) {
-      const { value, done } = await this.#stdout.read();
-      if (done) {
-        break;
-      }
-      this.#buffer += new TextDecoder().decode(value);
-
-      const newlineIndex = this.#buffer.indexOf("\n");
+      let newlineIndex = this.#buffer.indexOf("\n");
       if (newlineIndex === -1) {
-        continue;
+        const { value, done } = await this.#stdoutIter.next();
+        if (done) {
+          break;
+        }
+        this.#buffer += this.#decoder.decode(value, { stream: true });
+        newlineIndex = this.#buffer.indexOf("\n");
+        if (newlineIndex === -1) {
+          continue;
+        }
       }
       trace("buffer", { buffer: this.#buffer });
       const result = Message.safeParse(
@@ -338,7 +330,6 @@ export class WebView implements Disposable {
   /**
    * Gets the version of the webview binary.
    */
-  @instrument()
   async getVersion(): Promise<string> {
     const result = await this.#send({ $type: "getVersion" });
     return returnResult(result, "string");
@@ -350,7 +341,6 @@ export class WebView implements Disposable {
    * Note: this is the logical size of the window, not the physical size.
    * @see https://docs.rs/dpi/0.1.1/x86_64-unknown-linux-gnu/dpi/index.html#position-and-size-types
    */
-  @instrument()
   async setSize(size: { width: number; height: number }): Promise<void> {
     const result = await this.#send({ $type: "setSize", size });
     return returnAck(result);
@@ -362,7 +352,6 @@ export class WebView implements Disposable {
    * Note: this is the logical size of the window, not the physical size.
    * @see https://docs.rs/dpi/0.1.1/x86_64-unknown-linux-gnu/dpi/index.html#position-and-size-types
    */
-  @instrument()
   async getSize(
     includeDecorations?: boolean,
   ): Promise<{ width: number; height: number; scaleFactor: number }> {
@@ -381,7 +370,6 @@ export class WebView implements Disposable {
    *
    * @param fullscreen - If true, the webview will enter fullscreen mode. If false, the webview will exit fullscreen mode. If not specified, the webview will toggle fullscreen mode.
    */
-  @instrument()
   async fullscreen(fullscreen?: boolean): Promise<void> {
     const result = await this.#send({ $type: "fullscreen", fullscreen });
     return returnAck(result);
@@ -392,7 +380,6 @@ export class WebView implements Disposable {
    *
    * @param maximized - If true, the webview will be maximized. If false, the webview will be unmaximized. If not specified, the webview will toggle maximized state.
    */
-  @instrument()
   async maximize(maximized?: boolean): Promise<void> {
     const result = await this.#send({ $type: "maximize", maximized });
     return returnAck(result);
@@ -403,7 +390,6 @@ export class WebView implements Disposable {
    *
    * @param minimized - If true, the webview will be minimized. If false, the webview will be unminimized. If not specified, the webview will toggle minimized state.
    */
-  @instrument()
   async minimize(minimized?: boolean): Promise<void> {
     const result = await this.#send({ $type: "minimize", minimized });
     return returnAck(result);
@@ -412,7 +398,6 @@ export class WebView implements Disposable {
   /**
    * Sets the title of the webview window.
    */
-  @instrument()
   async setTitle(title: string): Promise<void> {
     const result = await this.#send({
       $type: "setTitle",
@@ -424,7 +409,6 @@ export class WebView implements Disposable {
   /**
    * Gets the title of the webview window.
    */
-  @instrument()
   async getTitle(): Promise<string> {
     const result = await this.#send({ $type: "getTitle" });
     return returnResult(result, "string");
@@ -433,7 +417,6 @@ export class WebView implements Disposable {
   /**
    * Sets the visibility of the webview window.
    */
-  @instrument()
   async setVisibility(visible: boolean): Promise<void> {
     const result = await this.#send({ $type: "setVisibility", visible });
     return returnAck(result);
@@ -442,7 +425,6 @@ export class WebView implements Disposable {
   /**
    * Returns true if the webview window is visible.
    */
-  @instrument()
   async isVisible(): Promise<boolean> {
     const result = await this.#send({ $type: "isVisible" });
     return returnResult(result, "boolean");
@@ -451,7 +433,6 @@ export class WebView implements Disposable {
   /**
    * Evaluates JavaScript code in the webview.
    */
-  @instrument()
   async eval(code: string): Promise<void> {
     const result = await this.#send({ $type: "eval", js: code });
     return returnAck(result);
@@ -460,7 +441,6 @@ export class WebView implements Disposable {
   /**
    * Opens the developer tools for the webview.
    */
-  @instrument()
   async openDevTools(): Promise<void> {
     const result = await this.#send({ $type: "openDevTools" });
     return returnAck(result);
@@ -469,7 +449,6 @@ export class WebView implements Disposable {
   /**
    * Reloads the webview with the provided html.
    */
-  @instrument()
   async loadHtml(html: string): Promise<void> {
     const result = await this.#send({ $type: "loadHtml", html });
     return returnAck(result);
@@ -478,7 +457,6 @@ export class WebView implements Disposable {
   /**
    * Loads a URL in the webview.
    */
-  @instrument()
   async loadUrl(url: string, headers?: Record<string, string>): Promise<void> {
     const result = await this.#send({ $type: "loadUrl", url, headers });
     return returnAck(result);
@@ -496,7 +474,6 @@ export class WebView implements Disposable {
    * using webview = await createWebView({ title: "My Webview" });
    * ```
    */
-  @instrument()
   destroy() {
     this[Symbol.dispose]();
   }
@@ -520,7 +497,6 @@ export class WebView implements Disposable {
    */
   [Symbol.dispose](): void {
     this.#internalEvent.removeAllListeners();
-    this.#stdin.releaseLock();
     try {
       this.#process.kill();
     } catch (_) {

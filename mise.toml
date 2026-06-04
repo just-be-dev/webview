@@ -1,5 +1,7 @@
 [tools]
 deno = "2.4.2"
+node = "24"
+bun = "1"
 ast-grep = "0.43.0"
 rust = { version = "1.90.0", components="rustfmt,clippy,rust-analyzer" }
 ruff = "0.15.14"
@@ -24,6 +26,14 @@ run = """
     rustup component add rustfmt clippy rust-analyzer
   """
 
+[tasks."npm:install"]
+hide = true
+description = "Install npm dependencies for the TypeScript client"
+dir = "src/clients/typescript"
+run = "npm install --no-audit --no-fund"
+sources = ["src/clients/typescript/package.json"]
+outputs = ["src/clients/typescript/node_modules/.package-lock.json"]
+
 [tasks.sync-versions]
 description = "Update all version references"
 run = "deno run -A scripts/sync-versions.ts"
@@ -37,13 +47,13 @@ depends_post = ["format:rust"]
 sources = ["src/**/*.rs", "Cargo.toml", "Cargo.lock"]
 outputs = ["schemas/*.json"]
 
-[tasks."gen:deno"]
-description = "Generate the deno client"
+[tasks."gen:ts"]
+description = "Generate the typescript client"
 run = "deno run -A scripts/generate-schema/index.ts --language typescript"
 depends = ["gen:rust"]
-depends_post = ["format:deno"]
+depends_post = ["format:ts"]
 sources = ["schemas/*", "scripts/generate-schema.ts"]
-outputs = ["src/clients/deno/schemas/*.ts"]
+outputs = ["src/clients/typescript/schemas.ts"]
 
 [tasks."gen:python"]
 description = "Generate the python client"
@@ -64,10 +74,16 @@ run = "deno run -A scripts/generate-schema/debug.ts $usage_schema"
 
 ## Publishing
 
-[tasks."verify-publish:deno"]
-description = "Verify the deno client is pulishable"
-dir = "src/clients/deno"
+[tasks."verify-publish:ts"]
+description = "Verify the typescript client is publishable to JSR"
+dir = "src/clients/typescript"
 run = "deno publish --dry-run"
+
+[tasks."verify-publish:npm"]
+description = "Verify the typescript client is publishable to npm"
+dir = "src/clients/typescript"
+depends = ["npm:install"]
+run = ["npm run build", "npm pack --dry-run"]
 
 [tasks.gen]
 description = "Run all code gen tasks"
@@ -92,9 +108,9 @@ sources = ["src/**/*.rs", "Cargo.toml", "Cargo.lock"]
 outputs = ["target/debug/webview"]
 depends = ["gen:rust"]
 
-[tasks."build:deno"]
-description = "Run code gen for deno and ensure the binary is built"
-depends = ["gen:deno", "build:rust"]
+[tasks."build:ts"]
+description = "Run code gen for the typescript client and ensure the binary is built"
+depends = ["gen:ts", "build:rust"]
 
 [tasks."build:python"]
 description = "Run code gen for python and ensure the binary is built"
@@ -110,9 +126,9 @@ depends = ["build:*"]
 description = "Format rust code"
 run = ["rustfmt src/**/*.rs"]
 
-[tasks."format:deno"]
-description = "Format deno code"
-run = ["deno fmt src/clients/deno"]
+[tasks."format:ts"]
+description = "Format typescript code"
+run = ["deno fmt src/clients/typescript"]
 
 [tasks."format:python"]
 description = "Format python code"
@@ -129,10 +145,16 @@ depends = ["format:*"]
 description = "Run clippy against rust code"
 run = ["rustfmt --check src/**/*.rs", "cargo clippy"]
 
-[tasks."lint:deno"]
-description = "Run deno lint"
-dir = "src/clients/deno"
+[tasks."lint:ts"]
+description = "Run deno lint and typecheck"
+dir = "src/clients/typescript"
 run = ["deno lint", "deno check ."]
+
+[tasks."lint:ts-npm"]
+description = "Typecheck the typescript client against node types"
+dir = "src/clients/typescript"
+depends = ["npm:install"]
+run = ["npm run check"]
 
 [tasks."lint:ast-grep"]
 description = "Run ast-grep lint"
@@ -161,11 +183,31 @@ run = "uv run -n examples/$usage_example.py"
 env = { LOG_LEVEL = "debug", WEBVIEW_BIN = "../../../target/debug/webview" }
 
 [tasks."example:deno"]
-description = "Run a deno example"
-depends = ["build:deno"]
+description = "Run a typescript example with Deno"
+depends = ["build:ts"]
 env = { LOG_LEVEL = "debug", WEBVIEW_BIN = "../../../target/debug/webview" }
 usage = '''
 arg "<example>" help="The example to run"
 '''
 run = "deno run -E -R -N --allow-run examples/$usage_example.ts"
-dir = "src/clients/deno"
+dir = "src/clients/typescript"
+
+[tasks."example:node"]
+description = "Run a typescript example with Node"
+depends = ["build:ts", "npm:install"]
+env = { LOG_LEVEL = "debug", WEBVIEW_BIN = "../../../target/debug/webview" }
+usage = '''
+arg "<example>" help="The example to run"
+'''
+run = "npx tsx examples/$usage_example.ts"
+dir = "src/clients/typescript"
+
+[tasks."example:bun"]
+description = "Run a typescript example with Bun"
+depends = ["build:ts", "npm:install"]
+env = { LOG_LEVEL = "debug", WEBVIEW_BIN = "../../../target/debug/webview" }
+usage = '''
+arg "<example>" help="The example to run"
+'''
+run = "bun run examples/$usage_example.ts"
+dir = "src/clients/typescript"

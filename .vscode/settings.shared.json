@@ -8,7 +8,7 @@
   },
   "deno.enablePaths": [
     "scripts",
-    "src/clients/deno"
+    "src/clients/typescript"
   ],
   "python.analysis.typeCheckingMode": "strict",
   "python.analysis.extraPaths": [

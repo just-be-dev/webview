@@ -11,7 +11,8 @@ import {
 import { parseSchema } from "./parser.ts";
 
 const schemasDir = new URL("../../schemas", import.meta.url).pathname;
-const tsSchemaDir = new URL("../../src/clients/deno", import.meta.url).pathname;
+const tsSchemaDir =
+  new URL("../../src/clients/typescript", import.meta.url).pathname;
 const pySchemaDir =
   new URL("../../src/clients/python/src/justbe_webview", import.meta.url)
     .pathname;

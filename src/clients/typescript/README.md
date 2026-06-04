@@ -1,9 +1,37 @@
-# @justbe/webview Deno Client
+# @justbe/webview TypeScript Client
 
 A light, cross-platform library for building web-based desktop apps with
-[Deno](https://deno.com/).
+[Node](https://nodejs.org/) (>= 20.9), [Deno](https://deno.com/), or
+[Bun](https://bun.sh/).
 
 ## Installation
+
+> [!NOTE]
+> The package name differs slightly by registry: it's
+> [`@justbe/webview` on JSR](https://jsr.io/@justbe/webview) and
+> [`@just-be/webview` on npm](https://www.npmjs.com/package/@just-be/webview).
+
+### Node
+
+```sh
+npm install @just-be/webview
+```
+
+```typescript
+import { createWebView } from "@just-be/webview";
+```
+
+### Bun
+
+```sh
+bun add @just-be/webview
+```
+
+```typescript
+import { createWebView } from "@just-be/webview";
+```
+
+### Deno
 
 ```typescript
 import { createWebView } from "jsr:@justbe/webview";
@@ -12,7 +40,7 @@ import { createWebView } from "jsr:@justbe/webview";
 ## Example
 
 ```typescript
-import { createWebView } from "jsr:@justbe/webview";
+import { createWebView } from "@just-be/webview"; // or "jsr:@justbe/webview" on Deno
 
 using webview = await createWebView({
   title: "Example",
@@ -28,20 +56,22 @@ webview.on("started", async () => {
 await webview.waitUntilClosed();
 ```
 
-You can run this yourself with:
-
-```sh
-deno run https://raw.githubusercontent.com/zephraph/webview/refs/heads/main/examples/simple.ts
-```
-
 Check out the [examples directory](examples/) for more examples.
 
-## Permissions
+## Binary Management
 
 When executing this package, it checks to see if you have the required binary
 for interfacing with the OS's webview. If it doesn't exist, it downloads it to a
-cache directory and executes it. This yields a few different permission code
-paths to be aware of.
+cache directory and executes it.
+
+You can specify a custom binary path using the `WEBVIEW_BIN` environment
+variable. When set, this will bypass the default binary resolution process.
+
+## Deno Permissions
+
+On Deno, the binary management above yields a few different permission code
+paths to be aware of. Node and Bun don't have a permission system, so none of
+this applies there.
 
 ### Binary not in cache
 
@@ -63,17 +93,21 @@ permission requests you can expect to see:
 On subsequent runs you can expect fewer permission requests:
 
 - Read HOME env -- Use to locate the cache directory
-- Read <cache>/deno-webview/deno-webview-<version>
-- Run <cache>/deno-webview/deno-webview-<version>
+- Read <cache>/webview/webview-<version>
+- Run <cache>/webview/webview-<version>
 
 ### Using a Custom Binary
 
-You can specify a custom binary path using the `WEBVIEW_BIN` environment
-variable. When set and allowed, this will bypass the default binary resolution
-process. In this case, only one permission is needed:
+When `WEBVIEW_BIN` is set and allowed, only one permission is needed:
 
 - Run <WEBVIEW_BIN>
 
 Note that this environment variable will never be _explicitly_ requested. If the
 script detects it's not allowed to read this env var it just skips this code
 path altogether.
+
+## Logging
+
+Set the `LOG_LEVEL` environment variable
+(`trace | debug | info | warn | error | fatal`) to control the client's log
+output.

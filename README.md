@@ -4,7 +4,7 @@ A light, cross-platform library for building web-based desktop apps. The project
 
 ## Available Clients
 
-- [Deno Client](src/clients/deno/README.md) - Build desktop apps using Deno and TypeScript
+- [TypeScript Client](src/clients/typescript/README.md) - Build desktop apps using Node, Deno, or Bun
 - [Python Client](src/clients/python/README.md) - Build desktop apps using Python
 
 ## Architecture
@@ -27,10 +27,12 @@ All clients support using a custom binary via the `WEBVIEW_BIN` environment vari
 ## Examples
 
 <details>
-<summary>Deno Example</summary>
+<summary>TypeScript Example (Node, Deno, or Bun)</summary>
 
 ```typescript
-import { createWebView } from "jsr:@justbe/webview";
+// Node/Bun: npm install @just-be/webview
+import { createWebView } from "@just-be/webview";
+// Deno: import { createWebView } from "jsr:@justbe/webview";
 
 using webview = await createWebView({
   title: "Example",

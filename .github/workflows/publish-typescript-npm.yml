@@ -1,0 +1,42 @@
+name: Publish TypeScript Client (npm)
+on:
+  workflow_run:
+    workflows: ["Verify", "Release Rust Binary"]
+    types:
+      - completed
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/clients/typescript
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Get current version
+        id: current_version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Get published version
+        id: published_version
+        run: echo "version=$(npm view @just-be/webview version 2>/dev/null || echo 'unpublished')" >> $GITHUB_OUTPUT
+
+      - name: Publish package
+        if: ${{ steps.current_version.outputs.version != steps.published_version.outputs.version }}
+        run: |
+          npm ci
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

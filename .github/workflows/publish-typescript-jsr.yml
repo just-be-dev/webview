@@ -1,4 +1,4 @@
-name: Publish Deno Client
+name: Publish TypeScript Client (JSR)
 on:
   workflow_run:
     workflows: ["Verify", "Release Rust Binary"]
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: src/clients/deno
+        working-directory: src/clients/typescript
 
     permissions:
       contents: write

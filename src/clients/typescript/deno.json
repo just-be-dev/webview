@@ -1,0 +1,16 @@
+{
+  "name": "@justbe/webview",
+  "exports": "./main.ts",
+  "license": "MIT",
+  "version": "1.0.1-rc.3",
+  "nodeModulesDir": "none",
+  "publish": {
+    "include": ["README.md", "LICENSE", "*.ts", "schemas/*.ts"],
+    "exclude": ["package.json", "tsconfig.npm.json", "tsdown.config.ts", "dist"]
+  },
+  "imports": {
+    "ts-pattern": "jsr:@gabriel/ts-pattern@^5.6.2",
+    "zod": "npm:zod@^3.23.8",
+    "type-fest": "npm:type-fest@^5.0.0"
+  }
+}
