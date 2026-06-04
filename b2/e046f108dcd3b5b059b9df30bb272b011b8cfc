@@ -1,0 +1,70 @@
+scripts/generate-schema/gen-typescript.ts
+  s_b1e9e963cbc690::t_5fd7e7c3e8f4cd 7
+src/clients/typescript/logger.ts
+  s_b1e9e963cbc690::t_8e194be7bf7b47 1-69
+mise.toml
+  s_b1e9e963cbc690::t_73ca3983056b92 3-4,29-36,50-51,54,56,77-79,82-87,111-113,129-131,148-150,153-158,186-187,193-213
+.vscode/settings.shared.json
+  s_b1e9e963cbc690::t_b2dce826fbd8b6 11
+src/clients/typescript/schemas.ts
+  s_b1e9e963cbc690::t_af331a50c57f22 2
+src/clients/typescript/deno.lock
+  ai_agent 4-11,14-20,22-26,29-36,38-46,49-54,56-60,62-63,65,68-186,188-497,503-559,564-589,600-611
+.zed/settings.json
+  s_b1e9e963cbc690::t_5dbb1daa1879b7 12
+scripts/generate-schema/index.ts
+  s_b1e9e963cbc690::t_4989f02566dd26 14-15
+.github/workflows/publish-typescript-jsr.yml
+  s_b1e9e963cbc690::t_d9490b5e1e7ff8 14
+  s_b1e9e963cbc690::t_cc84c23ceafa13 1
+src/clients/typescript/tsconfig.npm.json
+  ai_agent 1-15
+src/clients/typescript/deno.json
+  s_b1e9e963cbc690::t_b7e7a35d9aa541 8,13-14
+  s_b1e9e963cbc690::t_10e0c05c8af367 9
+  s_b1e9e963cbc690::t_e2a74a82deaf4f 6
+src/clients/typescript/package.json
+  s_b1e9e963cbc690::t_b7fefb5eac6b28 1-26,28-41
+  s_b1e9e963cbc690::t_acd299b0720c08 27
+README.md
+  s_b1e9e963cbc690::t_07ff99fb029a91 30,33-35
+  s_b1e9e963cbc690::t_efeac09f145f10 7
+src/clients/typescript/LICENSE
+  s_b1e9e963cbc690::t_90eea4e253c2fc 1-7
+src/clients/typescript/package-lock.json
+  ai_agent 1-1565
+src/clients/typescript/runtime.ts
+  s_b1e9e963cbc690::t_7d06e371da1f98 1-67
+src/clients/typescript/tsdown.config.ts
+  s_b1e9e963cbc690::t_52019f01e81eb6 1-6,8-10
+  s_b1e9e963cbc690::t_8e879c913b99a3 7
+scripts/sync-versions.ts
+  s_b1e9e963cbc690::t_99c65ea9329fb8 3-4,19-21,23,28-45
+.github/workflows/publish-typescript-npm.yml
+  s_b1e9e963cbc690::t_366e032048e65b 1-42
+src/clients/typescript/main.ts
+  s_b1e9e963cbc690::t_39c39614e796d5 4-5,10,27,29-31,38-40,45,97-102,104-108,112,118,130,133,144,147,156,159,161,164,189-191,209-214,230,236,238-241,243-246
+  s_b1e9e963cbc690::t_04bd35c7e2d8a5 192-193
+  s_b1e9e963cbc690::t_bfb0286e3e8d11 242
+.gitignore
+  s_b1e9e963cbc690::t_774535c672971a 6
+src/clients/typescript/README.md
+  s_b1e9e963cbc690::t_deec0f7e8e4ebd 1,4-5,9-35,43,61,67-74,96-97,101,108-113
+  s_b1e9e963cbc690::t_af331a50c57f22 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b2e046f108dcd3b5b059b9df30bb272b011b8cfc",
+  "prompts": {},
+  "sessions": {
+    "s_b1e9e963cbc690": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1e8320d-062c-4523-8856-803a797f56d8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Justin Bennett <git@just-be.dev>"
+    }
+  }
+}
