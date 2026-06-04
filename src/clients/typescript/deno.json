@@ -2,7 +2,7 @@
   "name": "@justbe/webview",
   "exports": "./main.ts",
   "license": "MIT",
-  "version": "1.0.1-rc.3",
+  "version": "1.0.1-rc.4",
   "nodeModulesDir": "none",
   "publish": {
     "include": ["README.md", "LICENSE", "*.ts", "schemas/*.ts"],

@@ -1,6 +1,6 @@
 {
   "name": "@just-be/webview",
-  "version": "1.0.1-rc.3",
+  "version": "1.0.1-rc.4",
   "description": "A light, cross-platform library for building web-based desktop apps. Works on Node, Deno, and Bun.",
   "license": "MIT",
   "type": "module",
