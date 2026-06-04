@@ -9,7 +9,7 @@
       "settings": {
         "deno": {
           "enable": true,
-          "enablePaths": ["src/clients/deno"]
+          "enablePaths": ["src/clients/typescript"]
         }
       }
     }

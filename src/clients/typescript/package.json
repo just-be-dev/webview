@@ -1,0 +1,41 @@
+{
+  "name": "@just-be/webview",
+  "version": "1.0.1-rc.4",
+  "description": "A light, cross-platform library for building web-based desktop apps. Works on Node, Deno, and Bun.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zephraph/webview.git"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "check": "tsc -p tsconfig.npm.json",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "ts-pattern": "^5.6.2",
+    "type-fest": "^5.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsdown": "^0.15.7",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
